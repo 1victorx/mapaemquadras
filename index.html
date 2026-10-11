@@ -84,6 +84,21 @@
           </div>
         </form>
 
+        <section class="street-lookup" aria-labelledby="street-search-title">
+          <div class="street-lookup-heading">
+            <div>
+              <h3 id="street-search-title">Encontrar quadra pela rua</h3>
+              <p>Digite o nome para ver as quadras próximas, com setor e bairro.</p>
+            </div>
+          </div>
+          <div class="field street-search-field">
+            <label for="street-search">Nome da rua</label>
+            <input id="street-search" name="street-search" type="search" autocomplete="off" placeholder="Ex.: Rua Vicente Ielpo" aria-describedby="street-search-help street-search-status" disabled>
+            <p id="street-search-help" class="field-help">A busca começa com 3 letras e aceita nomes sem acento.</p>
+          </div>
+          <p id="street-search-status" class="street-search-status" role="status" aria-live="polite">Carregando nomes de ruas…</p>
+          <div id="street-search-results" class="street-search-results"></div>
+        </section>
               </section>
 
       <section class="route-sheet" aria-labelledby="route-title">

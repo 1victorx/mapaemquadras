@@ -21,9 +21,13 @@ const formMessage = document.querySelector("#form-message");
 const dataBadge = document.querySelector("#data-badge");
 const routeDate = document.querySelector("#route-date");
 const officialNeighborhoodButton = document.querySelector("#use-official-neighborhood");
+const streetSearchInput = document.querySelector("#street-search");
+const streetSearchStatus = document.querySelector("#street-search-status");
+const streetSearchResults = document.querySelector("#street-search-results");
 
 let featureIndex = new Map();
 let sectorQuadIndex = new Map();
+let streetIndex = new Map();
 let routeIds = [];
 let suggestedFeature = null;
 
@@ -55,6 +59,23 @@ function makeSectorQuadId(sector, quad) {
   return numericKey(sector, 2) + "|" + numericKey(quad, 3);
 }
 
+function buildStreetIndex(features) {
+  streetIndex = new Map();
+  features.forEach((feature) => {
+    const featureId = makeId(feature.neighborhood, feature.sector, feature.quad);
+    (feature.streets || []).forEach((street) => {
+      if (!street || !street.name) return;
+      const key = normalizeText(street.name).replace(/\s+/g, " ").trim();
+      if (!key) return;
+      let entry = streetIndex.get(key);
+      if (!entry) {
+        entry = { key, name: street.name, locations: new Map() };
+        streetIndex.set(key, entry);
+      }
+      entry.locations.set(featureId, { feature, street });
+    });
+  });
+}
 function loadSavedRoute() {
   try {
     const value = JSON.parse(localStorage.getItem(ROUTE_STORAGE_KEY) || "[]");
@@ -125,6 +146,69 @@ function renderStreet(street, feature) {
   return row;
 }
 
+function renderStreetSearch(query) {
+  const normalizedQuery = normalizeText(query).replace(/\s+/g, " ").trim();
+  streetSearchResults.replaceChildren();
+  if (normalizedQuery.length < 3) {
+    streetSearchStatus.textContent = query.trim()
+      ? "Digite pelo menos 3 letras para procurar uma rua."
+      : "Digite o nome da rua para descobrir as quadras próximas.";
+    return;
+  }
+  const terms = normalizedQuery.split(" ").filter(Boolean);
+  const matches = Array.from(streetIndex.values())
+    .filter((entry) => terms.every((term) => entry.key.includes(term)))
+    .sort((a, b) => {
+      const aPrefix = a.key.startsWith(normalizedQuery) ? 0 : 1;
+      const bPrefix = b.key.startsWith(normalizedQuery) ? 0 : 1;
+      return aPrefix - bPrefix || a.name.localeCompare(b.name, "pt-BR");
+    });
+  if (!matches.length) {
+    streetSearchStatus.textContent = "Não encontrei essa rua na base municipal. Confira a grafia ou tente outro trecho do nome.";
+    return;
+  }
+  const visibleMatches = matches.slice(0, 8);
+  streetSearchStatus.textContent = matches.length > visibleMatches.length
+    ? "Encontrei " + matches.length + " ruas. Mostrando 8; digite mais letras para refinar."
+    : matches.length + (matches.length === 1 ? " rua encontrada." : " ruas encontradas.");
+  visibleMatches.forEach((entry, index) => {
+    const locations = Array.from(entry.locations.values()).sort((a, b) =>
+      titleCase(a.feature.neighborhood).localeCompare(titleCase(b.feature.neighborhood), "pt-BR") ||
+      a.feature.sector.localeCompare(b.feature.sector, "pt-BR", { numeric: true }) ||
+      a.feature.quad.localeCompare(b.feature.quad, "pt-BR", { numeric: true })
+    );
+    const details = createElement("details", "street-result");
+    details.open = index === 0;
+    const summary = createElement("summary", "street-result-summary");
+    const streetName = createElement("span", "street-result-name", titleCase(entry.name));
+    const count = createElement("span", "street-result-count", locations.length + (locations.length === 1 ? " quadra" : " quadras"));
+    summary.append(streetName, count);
+    const list = createElement("ul", "street-quad-list");
+    locations.forEach(({ feature, street }) => {
+      const item = createElement("li", "street-quad-row");
+      const information = createElement("div", "street-quad-info");
+      information.append(
+        createElement("strong", "street-quad-number", "Quadra " + feature.quad),
+        createElement("span", "street-quad-meta", titleCase(feature.neighborhood) + " · Setor " + feature.sector)
+      );
+      const actions = createElement("div", "street-quad-actions");
+      const mapsLink = createElement("a", "maps-link", "Ver no Maps");
+      mapsLink.href = makeMapsUrl(street);
+      mapsLink.target = "_blank";
+      mapsLink.rel = "noopener noreferrer";
+      mapsLink.setAttribute("aria-label", "Abrir " + titleCase(entry.name) + " perto da quadra " + feature.quad + " no Google Maps");
+      const addButton = createElement("button", "add-result-button", "Adicionar");
+      addButton.type = "button";
+      addButton.setAttribute("aria-label", "Adicionar quadra " + feature.quad + " do setor " + feature.sector + " de " + titleCase(feature.neighborhood) + " à rota");
+      addButton.addEventListener("click", () => addFeatureToRoute(feature, streetSearchInput));
+      actions.append(mapsLink, addButton);
+      item.append(information, actions);
+      list.append(item);
+    });
+    details.append(summary, list);
+    streetSearchResults.append(details);
+  });
+}
 function renderRoute() {
   routeList.replaceChildren();
   const validItems = routeIds.map((id) => featureIndex.get(id)).filter(Boolean);
@@ -190,23 +274,24 @@ function enableForm(neighborhoods) {
   neighborhoodSelect.disabled = false;
   sectorInput.disabled = false;
   quadInput.disabled = false;
+  streetSearchInput.disabled = false;
   addButton.disabled = false;
   dataBadge.textContent = "Base disponível";
   dataBadge.classList.add("is-ready");
 }
 
-function addFeatureToRoute(feature) {
+function addFeatureToRoute(feature, focusTarget = neighborhoodSelect) {
   const id = makeId(feature.neighborhood, feature.sector, feature.quad);
   if (routeIds.includes(id)) {
     setMessage("Essa quadra já está na rota.");
-    neighborhoodSelect.focus();
+    focusTarget.focus();
     return;
   }
   routeIds.push(id);
   const saved = saveRoute();
   renderRoute();
   form.reset();
-  neighborhoodSelect.focus();
+  focusTarget.focus();
   if (saved) setMessage("Quadra " + feature.quad + " adicionada à rota.");
 }
 
@@ -238,6 +323,7 @@ async function initialize() {
       sectorQuadIndex.set(pairId, matchingPair);
     });
 
+    buildStreetIndex(features);
     const neighborhoods = Array.from(new Set(features.map((feature) => feature.neighborhood).filter(Boolean)))
       .sort((a, b) => a.localeCompare(b, "pt-BR"));
     enableForm(neighborhoods);
@@ -286,6 +372,10 @@ form.addEventListener("submit", (event) => {
   setMessage("Não encontrei essa combinação na base municipal. Confira bairro, setor e número da quadra.", true);
 });
 
+streetSearchInput.addEventListener("input", () => {
+  window.clearTimeout(streetSearchTimer);
+  streetSearchTimer = window.setTimeout(() => renderStreetSearch(streetSearchInput.value), 180);
+});
 officialNeighborhoodButton.addEventListener("click", () => {
   if (!suggestedFeature) return;
   const feature = suggestedFeature;
