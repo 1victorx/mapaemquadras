@@ -29,6 +29,7 @@ jobs:
         run: |
           mkdir -p _site/data/generated
           cp index.html app.js styles.css _site/
+          sed -i "s|app.js|app.js?v=$GITHUB_SHA|g; s|styles.css|styles.css?v=$GITHUB_SHA|g" _site/index.html
           cp data/generated/quadras.json _site/data/generated/
       - name: Enviar os arquivos do site
         uses: actions/upload-pages-artifact@v4
