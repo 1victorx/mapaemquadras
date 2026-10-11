@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172842">
+  <meta name="description" content="Organize as quadras da rota de leitura e abra os logradouros no Google Maps.">
+  <title>MapaEmQuadras — caderno de rota</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body><!--
+  THESIS: Uma folha de trabalho de campo transforma cada quadra em uma parada numerada da rota do dia.
+  OWN-WORLD: Papel de campo claro, tinta índigo e marcações em laranja queimado; campos pautados e números tabulares priorizam leitura rápida.
+  STORY: Informe bairro, setor e quadra, resolva divergências com a base municipal e abra uma rua próxima no Maps.
+  FIRST VIEWPORT: No celular, título e data vêm antes da busca; bairro ocupa uma linha, setor e quadra dividem a seguinte e o botão alimenta a lista ordenada logo abaixo.
+  FORM: Caderno de rota de campo, candidato 4 da lista fundamentada, direção atribuída pelo seed a17e6857.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+  -->
+  <a class="skip-link" href="#main">Pular para o conteúdo</a>
+
+  <header class="masthead">
+    <div class="masthead-inner">
+      <a class="brand" href="./" aria-label="MapaEmQuadras, início">
+        <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M5 8h15v13H5zM23 8h20v8H23zM23 18h9v22h-9zM5 24h15v16H5zM34 19h9v21h-9z" fill="none" stroke="currentColor" stroke-width="2.2"/>
+          <path d="M10 32h8M28 13h11M28 34h11" fill="none" stroke="#f37a46" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name">Mapa<span>Em</span>Quadras</span>
+      </a>
+      <div class="masthead-note">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span>Apoio à leitura em campo</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="app-shell">
+    <section class="page-intro" aria-labelledby="page-title">
+      <div class="intro-copy">
+        <h1 id="page-title">Rota de hoje</h1>
+        <p>Encontre as ruas de cada quadra e siga na ordem do seu trabalho.</p>
+      </div>
+      <time id="route-date" class="date-stamp"></time>
+    </section>
+
+    <div class="work-grid">
+      <section class="lookup-sheet" aria-labelledby="add-title">
+        <div class="sheet-topline">
+          <div>
+            <h2 id="add-title">Adicionar quadra</h2>
+            <p>Informe os dados como aparecem na sua rota.</p>
+          </div>
+          <span id="data-badge" class="status-badge" role="status">Carregando base…</span>
+        </div>
+
+        <form id="quad-form" novalidate>
+          <div class="form-grid">
+            <div class="field field-neighborhood">
+              <label for="neighborhood">Bairro</label>
+              <select id="neighborhood" name="neighborhood" required disabled>
+                <option value="">Carregando bairros…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sector">Setor</label>
+              <input id="sector" name="sector" type="text" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="10" required disabled>
+            </div>
+            <div class="field">
+              <label for="quad">Quadra</label>
+              <input id="quad" name="quad" type="text" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="119" required disabled>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <div class="feedback-wrap">
+              <p id="form-message" class="form-message" role="status" aria-live="polite">Preparando a consulta das quadras.</p>
+              <button id="use-official-neighborhood" class="suggestion-button" type="button" hidden></button>
+            </div>
+            <button id="add-button" class="primary-button" type="submit" disabled>
+              <span>Adicionar à rota</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M10 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </form>
+
+              </section>
+
+      <section class="route-sheet" aria-labelledby="route-title">
+        <div class="route-heading">
+          <div>
+            <h2 id="route-title">Quadras da rota</h2>
+            <p id="route-help">Na sequência em que você vai percorrê-las.</p>
+          </div>
+          <span id="route-count" class="route-count">0 quadras</span>
+        </div>
+
+        <ol id="route-list" class="route-list" aria-describedby="route-help"></ol>
+
+        <div id="empty-state" class="empty-state">
+          <svg class="empty-map" viewBox="0 0 104 80" aria-hidden="true">
+            <path d="M5 15 34 5l31 10 34-9v57l-34 11-31-11L5 74zM34 5v58M65 15v59M5 44l29-10 31 9 34-11" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <path d="m20 47 13-5 14 5 13-4" fill="none" stroke="#ed7040" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="20" cy="47" r="3" fill="#ed7040"/>
+            <circle cx="60" cy="43" r="3" fill="#ed7040"/>
+          </svg>
+          <div>
+            <p class="empty-title">A folha está em branco.</p>
+            <p>Adicione a primeira quadra para começar sua rota de hoje.</p>
+          </div>
+        </div>
+
+        <div class="route-footer">
+          <p id="route-note">Sua lista fica salva neste aparelho.</p>
+          <button id="clear-button" class="text-button" type="button" hidden>Limpar rota</button>
+        </div>
+      </section>
+    </div>
+
+    <footer class="app-footer">
+      <p>Base cartográfica <a href="https://filipeia.joaopessoa.pb.gov.br/sigweb/" target="_blank" rel="noopener noreferrer">Filipeia / SEPLAN / PMJP</a></p>
+      <p>Confirme a rua no mapa antes de iniciar o deslocamento.</p>
+    </footer>
+  </main>
+
+  <noscript>Ative o JavaScript para consultar as quadras.</noscript>
+</body>
+</html>

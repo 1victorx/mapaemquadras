@@ -1,0 +1,20 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local GIS source layers contain unnecessary raw files and internal metadata
+/data/source/
+
+# Local tooling, generated build output and caches
+.impeccable/
+_site/
+node_modules/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
