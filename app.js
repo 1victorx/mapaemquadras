@@ -28,6 +28,7 @@ const streetSearchResults = document.querySelector("#street-search-results");
 let featureIndex = new Map();
 let sectorQuadIndex = new Map();
 let streetIndex = new Map();
+let streetSearchTimer = null;
 let routeIds = [];
 let suggestedFeature = null;
 
@@ -146,6 +147,36 @@ function renderStreet(street, feature) {
   return row;
 }
 
+function renderStreetLocations(entry, list) {
+  const locations = Array.from(entry.locations.values()).sort((a, b) =>
+    titleCase(a.feature.neighborhood).localeCompare(titleCase(b.feature.neighborhood), "pt-BR") ||
+    a.feature.sector.localeCompare(b.feature.sector, "pt-BR", { numeric: true }) ||
+    a.feature.quad.localeCompare(b.feature.quad, "pt-BR", { numeric: true })
+  );
+
+  locations.forEach(({ feature, street }) => {
+    const item = createElement("li", "street-quad-row");
+    const information = createElement("div", "street-quad-info");
+    information.append(
+      createElement("strong", "street-quad-number", "Quadra " + feature.quad),
+      createElement("span", "street-quad-meta", titleCase(feature.neighborhood) + " · Setor " + feature.sector)
+    );
+    const actions = createElement("div", "street-quad-actions");
+    const mapsLink = createElement("a", "maps-link", "Ver no Maps");
+    mapsLink.href = makeMapsUrl(street);
+    mapsLink.target = "_blank";
+    mapsLink.rel = "noopener noreferrer";
+    mapsLink.setAttribute("aria-label", "Abrir " + titleCase(entry.name) + " perto da quadra " + feature.quad + " no Google Maps");
+    const addButton = createElement("button", "add-result-button", "Adicionar");
+    addButton.type = "button";
+    addButton.setAttribute("aria-label", "Adicionar quadra " + feature.quad + " do setor " + feature.sector + " de " + titleCase(feature.neighborhood) + " à rota");
+    addButton.addEventListener("click", () => addFeatureToRoute(feature, streetSearchInput));
+    actions.append(mapsLink, addButton);
+    item.append(information, actions);
+    list.append(item);
+  });
+}
+
 function renderStreetSearch(query) {
   const normalizedQuery = normalizeText(query).replace(/\s+/g, " ").trim();
   streetSearchResults.replaceChildren();
@@ -155,6 +186,7 @@ function renderStreetSearch(query) {
       : "Digite o nome da rua para descobrir as quadras próximas.";
     return;
   }
+
   const terms = normalizedQuery.split(" ").filter(Boolean);
   const matches = Array.from(streetIndex.values())
     .filter((entry) => terms.every((term) => entry.key.includes(term)))
@@ -163,50 +195,38 @@ function renderStreetSearch(query) {
       const bPrefix = b.key.startsWith(normalizedQuery) ? 0 : 1;
       return aPrefix - bPrefix || a.name.localeCompare(b.name, "pt-BR");
     });
+
   if (!matches.length) {
     streetSearchStatus.textContent = "Não encontrei essa rua na base municipal. Confira a grafia ou tente outro trecho do nome.";
     return;
   }
+
   const visibleMatches = matches.slice(0, 8);
   streetSearchStatus.textContent = matches.length > visibleMatches.length
     ? "Encontrei " + matches.length + " ruas. Mostrando 8; digite mais letras para refinar."
     : matches.length + (matches.length === 1 ? " rua encontrada." : " ruas encontradas.");
-  visibleMatches.forEach((entry, index) => {
-    const locations = Array.from(entry.locations.values()).sort((a, b) =>
-      titleCase(a.feature.neighborhood).localeCompare(titleCase(b.feature.neighborhood), "pt-BR") ||
-      a.feature.sector.localeCompare(b.feature.sector, "pt-BR", { numeric: true }) ||
-      a.feature.quad.localeCompare(b.feature.quad, "pt-BR", { numeric: true })
-    );
+
+  visibleMatches.forEach((entry) => {
     const details = createElement("details", "street-result");
-    details.open = index === 0;
+    details.open = matches.length === 1;
     const summary = createElement("summary", "street-result-summary");
-    const streetName = createElement("span", "street-result-name", titleCase(entry.name));
-    const count = createElement("span", "street-result-count", locations.length + (locations.length === 1 ? " quadra" : " quadras"));
-    summary.append(streetName, count);
+    summary.append(
+      createElement("span", "street-result-name", titleCase(entry.name)),
+      createElement("span", "street-result-count", entry.locations.size + (entry.locations.size === 1 ? " quadra" : " quadras"))
+    );
     const list = createElement("ul", "street-quad-list");
-    locations.forEach(({ feature, street }) => {
-      const item = createElement("li", "street-quad-row");
-      const information = createElement("div", "street-quad-info");
-      information.append(
-        createElement("strong", "street-quad-number", "Quadra " + feature.quad),
-        createElement("span", "street-quad-meta", titleCase(feature.neighborhood) + " · Setor " + feature.sector)
-      );
-      const actions = createElement("div", "street-quad-actions");
-      const mapsLink = createElement("a", "maps-link", "Ver no Maps");
-      mapsLink.href = makeMapsUrl(street);
-      mapsLink.target = "_blank";
-      mapsLink.rel = "noopener noreferrer";
-      mapsLink.setAttribute("aria-label", "Abrir " + titleCase(entry.name) + " perto da quadra " + feature.quad + " no Google Maps");
-      const addButton = createElement("button", "add-result-button", "Adicionar");
-      addButton.type = "button";
-      addButton.setAttribute("aria-label", "Adicionar quadra " + feature.quad + " do setor " + feature.sector + " de " + titleCase(feature.neighborhood) + " à rota");
-      addButton.addEventListener("click", () => addFeatureToRoute(feature, streetSearchInput));
-      actions.append(mapsLink, addButton);
-      item.append(information, actions);
-      list.append(item);
+    details.addEventListener("toggle", () => {
+      if (details.open && details.dataset.rendered !== "true") {
+        renderStreetLocations(entry, list);
+        details.dataset.rendered = "true";
+      }
     });
     details.append(summary, list);
     streetSearchResults.append(details);
+    if (details.open) {
+      renderStreetLocations(entry, list);
+      details.dataset.rendered = "true";
+    }
   });
 }
 function renderRoute() {
@@ -324,12 +344,14 @@ async function initialize() {
     });
 
     buildStreetIndex(features);
+    streetSearchStatus.textContent = streetIndex.size.toLocaleString("pt-BR") + " nomes de ruas prontos. Digite pelo menos 3 letras.";
     const neighborhoods = Array.from(new Set(features.map((feature) => feature.neighborhood).filter(Boolean)))
       .sort((a, b) => a.localeCompare(b, "pt-BR"));
     enableForm(neighborhoods);
     renderRoute();
     setMessage(features.length.toLocaleString("pt-BR") + " quadras disponíveis para consulta.");
   } catch {
+    streetSearchStatus.textContent = "Não consegui carregar os nomes de ruas. Confira sua conexão e tente novamente.";
     dataBadge.textContent = "Base indisponível";
     dataBadge.classList.add("is-error");
     setMessage("Não consegui carregar a base de quadras. Confira se o app foi aberto pelo servidor local.", true);
